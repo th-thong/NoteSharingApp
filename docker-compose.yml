@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+
+  server:
+    build: .
+    container_name: note_server
+    volumes:
+      - .:/app
+    ports:
+      - "8080:8080"
+    working_dir: /app/build
+
+    command: bash -c "cmake .. && make && ./server_app"
+    stdin_open: true # Giữ terminal mở
+    tty: true
+
+  client:
+    build: .
+    container_name: note_client
+    volumes:
+      - .:/app
+    working_dir: /app/build
+
+    command: bash -c "cmake .. && make && tail -f /dev/null"
+    stdin_open: true
+    tty: true
+    depends_on:
+      - server
