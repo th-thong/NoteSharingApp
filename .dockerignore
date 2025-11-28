@@ -1,0 +1,9 @@
+build/
+cmake-build-debug/
+.vscode/
+.git/
+*.exe
+*.o
+*.so
+project_02_report/
+submission/
