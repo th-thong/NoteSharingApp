@@ -1,16 +1,34 @@
-enum class CommandType {
-    REGISTER,
+#ifndef PROTOCOL_H
+#define PROTOCOL_H
+
+#include <cstdint>
+
+enum class CommandType : uint8_t {
+    // --- Lệnh từ Client gửi lên ---
+    REGISTER = 1,
     LOGIN,
     UPLOAD_NOTE,
     DOWNLOAD_NOTE,
-    SHARE_NOTE_REQUEST_KEY, // Bước 1 chia sẻ: Xin public key của người nhận
-    SHARE_NOTE_SEND_KEY,    // Bước 2 chia sẻ: Gửi key ghi chú đã mã hóa
-    GET_METADATA
+    
+    // --- Nhóm lệnh chia sẻ (End-to-End) ---
+    SHARE_REQUEST_PUBKEY,   // Bước 1: Xin public key của user B
+    SHARE_SEND_ENCRYPTED_KEY, // Bước 2: Gửi key note đã mã hóa cho user B
+    
+    GET_METADATA,           // Lấy danh sách ghi chú
+    
+    // --- Phản hồi từ Server gửi về ---
+    CMD_SUCCESS,            // Thành công (Payload rỗng hoặc chứa data)
+    CMD_ERROR,              // Thất bại (Payload chứa thông báo lỗi text)
+    CMD_DATA                // Phản hồi chứa dữ liệu (ví dụ nội dung file tải về)
 };
 
-struct Packet {
+// Sử dụng pragma pack để ép struct không có byte thừa (padding)
+#pragma pack(push, 1) 
+struct PacketHeader {
     CommandType cmd;
-    char token[256];        // JWT Token để xác thực session
-    int payloadSize;
-    // Payload sẽ được gửi ngay sau Packet header này
+    uint32_t payloadSize;
+    char token[512];
 };
+#pragma pack(pop)
+
+#endif
