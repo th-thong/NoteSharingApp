@@ -4,6 +4,8 @@
 #include <string>
 #include <map>
 #include <ctime>
+#include <fstream>
+#include <iostream>
 
 struct NoteMetadata {
     std::string noteId;
@@ -22,7 +24,7 @@ private:
 
 public:
     // Lưu metadata và file (file content đã được mã hóa ở client)
-    bool saveNote(const std::string& owner, const std::string& encryptedContent, int durationSeconds);
+    bool saveNote(const std::string& owner, const std::string& encryptedContent, NoteMetadata metadata);
     
     // Lấy ghi chú. Phải kiểm tra expiry trước khi trả về.
     // Nếu hết hạn -> return false và xóa file.
