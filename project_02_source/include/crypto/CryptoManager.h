@@ -1,34 +1,64 @@
 #ifndef CRYPTO_MANAGER_H
 #define CRYPTO_MANAGER_H
 
-#include <string>
 #include <vector>
-// Include OpenSSL headers here
+#include <string>
+#include <cstdint> // Cho uint8_t
+#include <cstddef> // Cho size_t
 
 class CryptoManager {
+private:
+    CryptoManager() = delete;
 public:
-    // --- Hashing & Password (cho Auth) ---
-    // Sử dụng SHA-256 hoặc Argon2 + Salt
-    static std::string hashPassword(const std::string& password, const std::string& salt);
-    static std::string generateSalt();
-    
-    // --- AES Encryption (cho Client-side Encryption) ---
-    // Sử dụng AES-256-GCM hoặc CBC. GCM được khuyến khích để đảm bảo tính toàn vẹn.
-    // Trả về struct chứa Ciphertext và IV (Initialization Vector)
-    static std::vector<unsigned char> encryptAES(const std::string& plaintext, const std::string& key);
-    static std::string decryptAES(const std::vector<unsigned char>& ciphertext, const std::string& key);
-    
-    // Tạo khóa ngẫu nhiên cho mỗi ghi chú (256 bit)
-    static std::string generateRandomKey();
 
-    // --- Key Exchange (cho End-to-End Sharing) ---
-    // Sử dụng Diffie-Hellman để tạo Shared Secret giữa 2 user
-    struct DHKeys {
-        std::string publicKey;
-        std::string privateKey;
-    };
-    static DHKeys generateDHKeys();
-    static std::string computeSharedSecret(const std::string& myPrivateKey, const std::string& peerPublicKey);
+    // 1. Hàm bổ trợ
+    static std::vector<std::uint8_t> generateRandomBytes(size_t size);
+    
+    // 2. PBKDF2
+    static void hashPasswordPBKDF2(
+        const std::string& password,
+        std::vector<std::uint8_t>& saltOut,
+        std::vector<std::uint8_t>& hashOut);
+    static bool verifyPasswordPBKDF2(
+        const std::string& password,
+        const std::vector<std::uint8_t>& storedSalt,
+        const std::vector<std::uint8_t>& storedHash);
+
+    // 3. Diffie-Hellman
+    static void generateDHKeyPair(
+        std::vector<std::uint8_t>& publicKeyOut,
+        std::vector<std::uint8_t>& privateKeyOut);
+    static void deriveSharedSecret(
+        const std::vector<std::uint8_t>& myPrivateKey,
+        const std::vector<std::uint8_t>& peerPublicKey,
+        std::vector<std::uint8_t>& sharedSecretOut);
+
+    // 4. AES-GCM Encrypt/Decrypt
+    static bool aesEncrypt(
+        const std::vector<std::uint8_t>& plaintext,
+        const std::vector<std::uint8_t>& aesKey,
+        std::vector<std::uint8_t>& ivOut,
+        std::vector<std::uint8_t>& tagOut,
+        std::vector<std::uint8_t>& ciphertextOut);
+    static bool aesDecrypt(
+        const std::vector<std::uint8_t>& ciphertext,
+        const std::vector<std::uint8_t>& aesKey,
+        const std::vector<std::uint8_t>& iv,
+        const std::vector<std::uint8_t>& tag,
+        std::vector<std::uint8_t>& plaintextOut);
+
+    // 5. Trao đổi khoá
+    static bool encryptAESKeyForRecipient(
+        const std::vector<std::uint8_t>& aesKey,
+        const std::vector<std::uint8_t>& sharedSecret,
+        std::vector<std::uint8_t>& encryptedKeyOut);
+    static bool decryptAESKeyFromSender(
+        const std::vector<std::uint8_t>& encryptedKey,
+        const std::vector<std::uint8_t>& sharedSecret,
+        std::vector<std::uint8_t>& aesKeyOut);
+
+    // 6. Base64 Encoding/Decoding
+    static std::string base64Encode(const std::vector<std::uint8_t>& data);
+    static std::vector<std::uint8_t> base64Decode(const std::string& encoded);
 };
-
 #endif
