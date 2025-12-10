@@ -147,64 +147,29 @@ void CryptoManager::generateDHKeyPair(
 
 
 // Tính toán khoá bí mật chung (A dùng khóa bí mật của A và khóa công khai của B)
-void CryptoManager::deriveSharedSecret(
-    const vector<uint8_t>& myPrivateKey,    // Khoá bí mật của người dùng hiện tại
-    const vector<uint8_t>& peerPublicKey,   // Khoá bí mật của người còn lại
-    vector<uint8_t>& sharedSecretOut)       // Khóa cuối cùng dùng để mã hóa/giải mã khóa AES của ghi chú.
-{
-    // Tạo EVP_PKEY từ raw private
-    EVP_PKEY* priv = EVP_PKEY_new_raw_private_key(
-        EVP_PKEY_X25519, 
-        nullptr,
-        myPrivateKey.data(), 
-        myPrivateKey.size());
-    if (!priv) throwOnError("Load private key failed");
+std::vector<uint8_t> CryptoManager::deriveSharedSecret(const std::vector<uint8_t>& myPrivateKey, const std::vector<uint8_t>& peerPublicKey) {
+    EVP_PKEY* privKey = EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, NULL, myPrivateKey.data(), myPrivateKey.size());
+    EVP_PKEY* pubKey = EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, NULL, peerPublicKey.data(), peerPublicKey.size());
 
-    // Tạo EVP_PKEY từ raw public
-    EVP_PKEY* pub = EVP_PKEY_new_raw_public_key(
-        EVP_PKEY_X25519, 
-        nullptr,
-        peerPublicKey.data(),
-        peerPublicKey.size());
-    if (!pub) {
-        EVP_PKEY_free(priv);
-        throwOnError("Load public key failed");
-    }
+    if (!privKey || !pubKey) throw std::runtime_error("Invalid keys for DH");
 
-    EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(priv, nullptr);
-    if (!ctx) {
-        EVP_PKEY_free(priv); EVP_PKEY_free(pub);
-        throwOnError("PKEY_CTX_new failed");
-    }
+    EVP_PKEY_CTX* ctx = EVP_PKEY_CTX_new(privKey, NULL);
+    if (!ctx) throw std::runtime_error("Ctx creation failed");
 
-    if (EVP_PKEY_derive_init(ctx) != 1) {
-        EVP_PKEY_free(priv); EVP_PKEY_free(pub); EVP_PKEY_CTX_free(ctx);
-        throwOnError("derive_init failed");
-    }
+    if (EVP_PKEY_derive_init(ctx) <= 0) throw std::runtime_error("Derive init failed");
+    if (EVP_PKEY_derive_set_peer(ctx, pubKey) <= 0) throw std::runtime_error("Derive set peer failed");
 
-    if (EVP_PKEY_derive_set_peer(ctx, pub) != 1) {
-        EVP_PKEY_free(priv); EVP_PKEY_free(pub); EVP_PKEY_CTX_free(ctx);
-        throwOnError("derive_set_peer failed");
-    }
+    size_t secretLen;
+    if (EVP_PKEY_derive(ctx, NULL, &secretLen) <= 0) throw std::runtime_error("Derive len failed");
 
-    size_t secretLen = 0;
-    if (EVP_PKEY_derive(ctx, nullptr, &secretLen) != 1) {
-        EVP_PKEY_free(priv); EVP_PKEY_free(pub); EVP_PKEY_CTX_free(ctx);
-        throwOnError("derive length failed");
-    }
+    std::vector<uint8_t> secret(secretLen);
+    if (EVP_PKEY_derive(ctx, secret.data(), &secretLen) <= 0) throw std::runtime_error("Derive failed");
 
-    sharedSecretOut.resize(secretLen);
-    if (EVP_PKEY_derive(ctx, sharedSecretOut.data(), &secretLen) != 1) {
-        EVP_PKEY_free(priv); EVP_PKEY_free(pub); EVP_PKEY_CTX_free(ctx);
-        throwOnError("derive failed");
-    }
-
-    //Expected: secretlen có độ dài 32 bit
-    sharedSecretOut.resize(secretLen);
-
-    EVP_PKEY_free(priv);
-    EVP_PKEY_free(pub);
     EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(privKey);
+    EVP_PKEY_free(pubKey);
+
+    return secret; // Shared Secret này sẽ dùng làm Key AES để mã hóa NoteKey
 }
 
 

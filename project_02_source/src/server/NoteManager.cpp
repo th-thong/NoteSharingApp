@@ -1,4 +1,5 @@
 #include "NoteManager.h"
+#include "CryptoManager.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -11,191 +12,333 @@ using namespace std;
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
-// Thư mục lưu trữ (đảm bảo trùng khớp với Docker mount)
-const std::string STORAGE_DIR = "database_storage";
+const std::string STORAGE_DIR = "server_data/notes/";
+const std::string SHARE_DIR = "server_data/shares/";
 
-// --- Helper Functions ---
 
-// Hàm chuyển Struct sang JSON
-json NoteMetadataToJson(const NoteMetadata& metadata) {
-    json j;
-    j["noteId"]         = metadata.noteId;
-    j["ownerUsername"]  = metadata.ownerUsername;
-    j["filePath"]       = metadata.filePath;
-    j["uploadTime"]     = metadata.uploadTime; 
-    j["expirationTime"] = metadata.expirationTime;
-    j["maxViews"]       = metadata.maxViews;
-    j["currentViews"]   = metadata.currentViews;
-    j["isShared"]       = metadata.isShared;
-    return j;
+// -------------------------------------------------------------------
+//                  Chuyễn đổi giữa Struct và JSON
+// -------------------------------------------------------------------
+json NoteMetadataToJson(const NoteMetadata& m) {
+    return json{
+        {"noteId", m.noteId}, {"owner", m.ownerUsername},
+        {"path", m.filePath}, {"uploadTime", m.uploadTime},
+        {"iv", m.iv}, {"tag", m.tag}, {"filename", m.originalFilename}
+    };
 }
 
-// Hàm chuyển JSON sang Struct
 NoteMetadata JsonToNoteMetadata(const json& j) {
     NoteMetadata m;
-    m.noteId = j.value("noteId", "");
-    m.ownerUsername = j.value("ownerUsername", "");
-    m.filePath = j.value("filePath", "");
-    m.uploadTime = j.value("uploadTime", 0);
-    m.expirationTime = j.value("expirationTime", 0);
-    m.maxViews = j.value("maxViews", 0);
-    m.currentViews = j.value("currentViews", 0);
-    m.isShared = j.value("isShared", false);
+    m.noteId = j.value("noteId", ""); m.ownerUsername = j.value("owner", "");
+    m.filePath = j.value("path", ""); m.uploadTime = j.value("uploadTime", 0);
+    m.iv = j.value("iv", ""); m.tag = j.value("tag", "");
+    m.originalFilename = j.value("filename", "unknown.bin");
+
     return m;
 }
 
-// --- Class Implementation ---
-
-NoteManager::NoteManager() {
-    // Tạo thư mục lưu trữ nếu chưa có
-    if (!fs::exists(STORAGE_DIR)) {
-        fs::create_directories(STORAGE_DIR);
-    }
+json ShareToJSON(const ShareMetadata& m) {
+    return json{
+        {"shareId", m.shareId}, {"linkedNoteId", m.linkedNoteId},
+        {"created", m.createdTime}, {"expire", m.expirationTime},
+        {"maxV", m.maxViews}, {"curV", m.currentViews},
+        {"senderUsername",m.senderUsername},{"recipientUsername",m.recipientUsername},
+        {"encryptedKey", m.encryptedKey}, {"keyIv",m.keyIv},
+        {"keyTag",m.keyTag}
+    };
 }
 
-// Hàm tạo ID ngẫu nhiên (URL ngắn)
-std::string NoteManager::generateUniqueLink() {
+ShareMetadata JSONToShare(const json& j) {
+    ShareMetadata m;
+    m.shareId = j.value("shareId", ""); m.linkedNoteId = j.value("linkedNoteId", "");
+    m.createdTime = j.value("created", 0); m.expirationTime = j.value("expire", 0);
+    m.maxViews = j.value("maxV", 0); m.currentViews = j.value("curV", 0);
+    m.senderUsername = j.value("senderUsername", "");
+    m.recipientUsername = j.value("recipientUsername", "");
+    m.encryptedKey = j.value("encryptedKey", "");
+    m.keyIv = j.value("keyIv", "");
+    m.keyTag = j.value("keyTag", "");
+    return m;
+}
+
+
+// -------------------------------------------------------------------
+//                      Tạo ID Độc Nhất
+// -------------------------------------------------------------------
+std::string NoteManager::generateUniqueId() {
     const std::string chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     std::random_device rd;
     std::mt19937 generator(rd());
     std::uniform_int_distribution<> distribution(0, chars.size() - 1);
-
     std::string id = "";
-    // Tạo ID độ dài 12 ký tự
-    for (int i = 0; i < 12; ++i) {
-        id += chars[distribution(generator)];
-    }
+    for (int i = 0; i < 12; ++i) id += chars[distribution(generator)];
     return id;
 }
 
-// Hàm lưu Note (trả về ID của note vừa tạo)
-std::string NoteManager::saveNote(const std::string& owner, const std::string& encryptedContent, int durationSeconds, int maxViews) {
-    // 1. Tạo Metadata mới
-    NoteMetadata metadata;
-    metadata.noteId = generateUniqueLink(); [cite_start]// [cite: 43] Tạo ID duy nhất
-    metadata.ownerUsername = owner;
-    
-    // Đường dẫn file nội dung (Binary)
-    metadata.filePath = STORAGE_DIR + "/" + metadata.noteId + ".bin";
-    
-    metadata.uploadTime = std::time(nullptr);
-    metadata.expirationTime = metadata.uploadTime + durationSeconds; [cite_start]// [cite: 27] Tính thời gian hết hạn
-    metadata.maxViews = maxViews; [cite_start]// [cite: 27] Giới hạn số lượt xem
-    metadata.currentViews = 0;
-    metadata.isShared = false;
-
-    // Đường dẫn file Metadata (JSON)
-    std::string metadataPath = STORAGE_DIR + "/" + metadata.noteId + ".json";
-
-    // 2. Lưu File Metadata (JSON)
-    json j = NoteMetadataToJson(metadata);
-    std::ofstream metaFile(metadataPath);
-    if (metaFile.is_open()) {
-        metaFile << j.dump(4);
-        metaFile.close();
-    } else {
-        return ""; // Lỗi không ghi được
-    }
-
-    // 3. Lưu File Nội dung (Encrypted Blob)
-    // QUAN TRỌNG: Phải dùng ios::binary vì encryptedContent chứa byte rác/null
-    std::ofstream contentFile(metadata.filePath, std::ios::binary);
-    if (contentFile.is_open()) {
-        contentFile.write(encryptedContent.data(), encryptedContent.size());
-        contentFile.close();
-    } else {
-        return "";
-    }
-
-    return metadata.noteId;
+NoteManager::NoteManager() {
+    if (!fs::exists("server_data")) fs::create_directory("server_data");
+    if (!fs::exists(STORAGE_DIR)) fs::create_directories(STORAGE_DIR);
+    if (!fs::exists(SHARE_DIR)) fs::create_directories(SHARE_DIR);
 }
 
-// Hàm lấy Note (Có kiểm tra logic Hết hạn và View)
-bool NoteManager::getNote(const std::string& noteId, std::string& outEncryptedContent) {
-    std::string metadataPath = STORAGE_DIR + "/" + noteId + ".json";
+// -------------------------------------------------------------------
+//              Lưu trữ và truy xuất Note
+// -------------------------------------------------------------------
 
-    // 1. Kiểm tra file metadata có tồn tại không
-    if (!fs::exists(metadataPath)) return false;
+std::string NoteManager::saveNote(const std::string& owner,
+    const std::string& encryptedContent,
+    const std::string& iv,
+    const std::string& tag,
+    const std::string& filename) {
+    NoteMetadata meta;
+    meta.noteId = generateUniqueId();
+    meta.ownerUsername = owner;
+    meta.filePath = STORAGE_DIR + meta.noteId + ".bin";
+    meta.uploadTime = std::time(nullptr);
+    meta.iv = iv;
+    meta.tag = tag;
+    meta.originalFilename = filename;
 
-    // 2. Đọc Metadata
-    std::ifstream metaFile(metadataPath);
-    json j;
-    metaFile >> j;
-    metaFile.close();
+    // DECODE Base64 về binary trước khi lưu
+    std::vector<uint8_t> binaryData = CryptoManager::base64Decode(encryptedContent);
 
-    NoteMetadata metadata = JsonToNoteMetadata(j);
+    // Lưu binary content
+    std::ofstream binFile(meta.filePath, std::ios::binary);
+    if (!binFile.is_open()) return "";
+    binFile.write((char*)binaryData.data(), binaryData.size());
+    binFile.close();
 
-    [cite_start]// 3. Kiểm tra logic bảo mật [cite: 27, 44]
-    
-    // A. Kiểm tra thời gian hết hạn
-    time_t now = std::time(nullptr);
-    if (now > metadata.expirationTime) {
-        std::cout << "[NOTE] Note expired. Deleting..." << std::endl;
-        // Xóa file nếu hết hạn (tự động dọn dẹp ngay khi truy cập)
-        fs::remove(metadataPath);
-        fs::remove(metadata.filePath);
-        return false;
-    }
+    // Lưu Metadata
+    std::ofstream jsonFile(STORAGE_DIR + meta.noteId + ".json");
+    jsonFile << NoteMetadataToJson(meta).dump(4);
 
-    // B. Kiểm tra số lượt xem (nếu có giới hạn)
-    if (metadata.maxViews > 0 && metadata.currentViews >= metadata.maxViews) {
-        std::cout << "[NOTE] Max views reached. Deleting..." << std::endl;
-        fs::remove(metadataPath);
-        fs::remove(metadata.filePath);
-        return false;
-    }
-
-    // 4. Nếu hợp lệ: Đọc nội dung file mã hóa
-    std::ifstream contentFile(metadata.filePath, std::ios::binary);
-    if (!contentFile.is_open()) return false;
-
-    // Đọc toàn bộ file vào string buffer
-    std::stringstream buffer;
-    buffer << contentFile.rdbuf();
-    outEncryptedContent = buffer.str();
-    contentFile.close();
-
-    // 5. Cập nhật lượt xem (Current Views) và lưu lại Metadata
-    metadata.currentViews++;
-    
-    // Nếu đây là lần xem cuối cùng (vừa đủ maxViews), ta có thể xóa luôn hoặc để lần sau xóa
-    // Ở đây chọn cách cập nhật để lần sau truy cập sẽ bị chặn
-    std::ofstream updateMeta(metadataPath);
-    updateMeta << NoteMetadataToJson(metadata).dump(4);
-    updateMeta.close();
-
-    return true;
+    return meta.noteId;
 }
 
-// Hàm dọn dẹp định kỳ (chạy background hoặc khi khởi động server)
-void NoteManager::cleanupExpiredNotes() {
-    time_t now = std::time(nullptr);
-    int deletedCount = 0;
+// Hàm lấy nội dung dành cho chủ sở hữu note
+bool NoteManager::getNoteContent(const std::string& noteId,
+    std::string& outContent,
+    std::string& outIV,
+    std::string& outTag,
+    std::string& outFilename)
+{
+    std::string notePath = STORAGE_DIR + noteId + ".json";
+    if (!fs::exists(notePath)) return false;
 
-    // Duyệt qua tất cả file trong thư mục storage
+    // Đọc Metadata
+    std::ifstream nf(notePath);
+    json nj; nf >> nj; nf.close();
+
+    NoteMetadata note = JsonToNoteMetadata(nj);
+
+    outIV = note.iv;
+    outTag = note.tag;
+
+    // --- LẤY TÊN FILE ---
+    outFilename = note.originalFilename.empty() ? "downloaded_file.bin" : note.originalFilename;
+
+
+    // Đọc Content
+    std::ifstream bf(note.filePath, std::ios::binary | std::ios::ate);
+    if (!bf.is_open()) return false;
+
+    std::streamsize size = bf.tellg();
+    bf.seekg(0, std::ios::beg);
+
+    if (size <= 0) {
+        outContent = "";
+        return true;
+    }
+
+    std::vector<char> buffer(size);
+    if (bf.read(buffer.data(), size)) {
+        outContent.assign(buffer.begin(), buffer.end());
+        return true;
+    }
+
+    return false;
+}
+
+// Lấy danh sách note của một user
+std::vector<NoteMetadata> NoteManager::getNotesByUser(const std::string& username) {
+    std::vector<NoteMetadata> result;
+    if (!fs::exists(STORAGE_DIR)) return result;
+
     for (const auto& entry : fs::directory_iterator(STORAGE_DIR)) {
         if (entry.path().extension() == ".json") {
             try {
                 std::ifstream f(entry.path());
-                json j;
-                f >> j;
-                f.close();
+                json j; f >> j; f.close();
 
-                time_t expTime = j["expirationTime"];
-                
-                // Nếu hết hạn -> Xóa cả json và bin
-                if (now > expTime) {
-                    std::string binPath = j["filePath"];
-                    fs::remove(entry.path()); // Xóa .json
-                    fs::remove(binPath);      // Xóa .bin
-                    deletedCount++;
+                NoteMetadata meta = JsonToNoteMetadata(j);
+                if (meta.ownerUsername == username) {
+                    result.push_back(meta);
                 }
-            } catch (...) {
-                continue; // Bỏ qua file lỗi
             }
+            catch (...) { continue; }
         }
     }
-    if (deletedCount > 0) {
-        std::cout << "[CLEANUP] Deleted " << deletedCount << " expired notes." << std::endl;
+    return result;
+}
+
+// Xóa note
+bool NoteManager::deleteNote(const std::string& noteId, const std::string& username) {
+    std::string metadataPath = STORAGE_DIR + noteId + ".json";
+    if (!fs::exists(metadataPath)) return false;
+
+    try {
+        std::ifstream f(metadataPath); json j; f >> j; f.close();
+        NoteMetadata meta = JsonToNoteMetadata(j);
+
+        if (meta.ownerUsername != username) return false;
+
+        fs::remove(metadataPath);
+        fs::remove(meta.filePath);
+
+        return true;
     }
+    catch (...) { return false; }
+}
+
+// -------------------------------------------------------------------
+//              Chia sẻ Note    
+// -------------------------------------------------------------------
+
+std::string NoteManager::createShare(const std::string& noteId, const std::string& username, int duration, int maxViews) {
+    std::string noteJsonPath = STORAGE_DIR + noteId + ".json";
+    if (!fs::exists(noteJsonPath)) return "";
+
+    std::ifstream f(noteJsonPath); json j; f >> j; f.close();
+    NoteMetadata note = JsonToNoteMetadata(j);
+
+    // Chỉ chủ sở hữu mới được tạo link
+    if (note.ownerUsername != username) return "";
+
+    ShareMetadata share;
+    share.shareId = generateUniqueId();
+    share.linkedNoteId = noteId;
+    share.createdTime = std::time(nullptr);
+    share.expirationTime = share.createdTime + duration;
+    share.maxViews = maxViews;
+    share.currentViews = 0;
+
+    std::ofstream sFile(SHARE_DIR + share.shareId + ".json");
+    sFile << ShareToJSON(share).dump(4);
+
+    return share.shareId;
+}
+
+// Lấy nội dung note từ link chia sẻ
+bool NoteManager::getSharedNoteContent(const std::string& shareId,
+    std::string& outContent,
+    std::string& outIV,
+    std::string& outTag,
+    ShareMetadata& outMeta,
+    std::string& outFilename)
+{
+    std::string sharePath = SHARE_DIR + shareId + ".json";
+    if (!fs::exists(sharePath)) return false;
+
+    // 1. Đọc Share Info
+    std::ifstream sf(sharePath);
+    json sj;
+    sf >> sj;
+    sf.close();
+
+    ShareMetadata share = JSONToShare(sj);
+
+
+    time_t now = std::time(nullptr);
+    if (now > share.expirationTime) {
+        fs::remove(sharePath); // Xóa link hết hạn
+        return false;
+    }
+    if (share.maxViews > 0 && share.currentViews >= share.maxViews) {
+        fs::remove(sharePath); // Xóa link hết lượt xem
+        return false;
+    }
+
+    // 3. Cập nhật lượt xem
+    share.currentViews++;
+    std::ofstream usf(sharePath);
+    usf << ShareToJSON(share).dump(4);
+    usf.close();
+
+    // 4. Xuất Metadata ra ngoài
+    outMeta = share;
+
+    // 5. Đọc Note Gốc
+    return getNoteContent(share.linkedNoteId, outContent, outIV, outTag, outFilename);
+}
+
+void NoteManager::cleanupExpiredNotes() {
+    // Logic này có thể mở rộng để quét thư mục SHARE_DIR
+    // Hiện tại chỉ demo, bạn có thể implement tương tự deleteNote
+}
+
+
+std::string NoteManager::createTargetedShare(
+    const std::string& noteId,
+    const std::string& sender,
+    const std::string& recipient,
+    const std::string& encKey,
+    const std::string& iv,
+    const std::string& tag,
+    int duration,
+    int maxViews)
+{
+    // Kiểm tra Note gốc có tồn tại không
+    std::string noteJsonPath = STORAGE_DIR + noteId + ".json";
+    if (!fs::exists(noteJsonPath)) {
+        return ""; // File không tồn tại
+    }
+
+    // Đọc metadata của Note gốc để kiểm tra quyền sở hữu
+    try {
+        std::ifstream f(noteJsonPath);
+        json j;
+        f >> j;
+        f.close();
+
+        NoteMetadata note = JsonToNoteMetadata(j);
+
+        // Nếu người yêu cầu share không phải là chủ sở hữu -> Từ chối
+        if (note.ownerUsername != sender) {
+            return "";
+        }
+
+        // Tạo Metadata cho bản chia sẻ
+        ShareMetadata share;
+        share.shareId = generateUniqueId(); // Sinh ID mới cho link share
+        share.linkedNoteId = noteId;        // Trỏ về file gốc
+
+        // Điền thông tin E2EE
+        share.senderUsername = sender;
+        share.recipientUsername = recipient;
+        share.encryptedKey = encKey;        // Key AES đã được mã hóa bằng DH Secret
+        share.keyIv = iv;
+        share.keyTag = tag;
+
+        // Điền thông tin giới hạn truy cập
+        share.createdTime = std::time(nullptr);
+        share.expirationTime = share.createdTime + duration;
+        share.maxViews = maxViews;
+        share.currentViews = 0;
+
+        // Lưu Metadata chia sẻ vào file JSON
+        std::string sharePath = SHARE_DIR + share.shareId + ".json";
+        std::ofstream sFile(sharePath);
+
+        if (sFile.is_open()) {
+            sFile << ShareToJSON(share).dump(4);
+            sFile.close();
+            return share.shareId; // Trả về ID chia sẻ thành công
+        }
+
+    }
+    catch (...) {
+        return "";
+    }
+
+    return "";
 }

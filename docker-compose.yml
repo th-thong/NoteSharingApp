@@ -1,29 +1,31 @@
 version: '3.8'
 
 services:
-
   server:
     build: .
     container_name: note_server
+    working_dir: /app/build
     volumes:
       - .:/app
+      - /app/build
+      - ./server_data:/app/build/server_data
+      
     ports:
       - "8080:8080"
-    working_dir: /app/build
-
-    command: bash -c "cmake .. && make && ./server_app"
-    stdin_open: true # Giữ terminal mở
+    command: bash -c "rm -rf CMakeFiles CMakeCache.txt Makefile cmake_install.cmake && cmake .. && make && ./server_app"
+    stdin_open: true
     tty: true
 
   client:
     build: .
     container_name: note_client
+    working_dir: /app/build
     volumes:
       - .:/app
-    working_dir: /app/build
-
-    command: bash -c "cmake .. && make && tail -f /dev/null"
-    stdin_open: true
-    tty: true
+      - /app/build
+      - ./client_data:/app/build/client_data
     depends_on:
       - server
+    command: bash -c "rm -rf CMakeFiles CMakeCache.txt Makefile cmake_install.cmake && cmake .. && make && tail -f /dev/null"
+    stdin_open: true
+    tty: true
