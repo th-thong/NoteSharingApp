@@ -9,10 +9,10 @@ services:
       - .:/app
       - /app/build
       - ./server_data:/app/build/server_data
-      
     ports:
       - "8080:8080"
-    command: bash -c "rm -rf CMakeFiles CMakeCache.txt Makefile cmake_install.cmake && cmake .. && make && ./server_app"
+    # Build toàn bộ (Server, Client, Tests) và chạy Server
+    command: bash -c "rm -rf CMakeFiles CMakeCache.txt && cmake .. && make && ./server_app"
     stdin_open: true
     tty: true
 
@@ -26,6 +26,7 @@ services:
       - ./client_data:/app/build/client_data
     depends_on:
       - server
-    command: bash -c "rm -rf CMakeFiles CMakeCache.txt Makefile cmake_install.cmake && cmake .. && make && tail -f /dev/null"
+    # Client build xong sẽ ở trạng thái chờ
+    command: bash -c "rm -rf CMakeFiles CMakeCache.txt && cmake .. && make && tail -f /dev/null"
     stdin_open: true
     tty: true

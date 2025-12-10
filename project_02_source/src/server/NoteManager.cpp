@@ -8,12 +8,8 @@
 #include <ctime>
 #include <sstream>
 
-using namespace std;
 using json = nlohmann::json;
 namespace fs = std::filesystem;
-
-const std::string STORAGE_DIR = "server_data/notes/";
-const std::string SHARE_DIR = "server_data/shares/";
 
 
 // -------------------------------------------------------------------
@@ -75,9 +71,18 @@ std::string NoteManager::generateUniqueId() {
     return id;
 }
 
-NoteManager::NoteManager() {
-    if (!fs::exists("server_data")) fs::create_directory("server_data");
-    if (!fs::exists(STORAGE_DIR)) fs::create_directories(STORAGE_DIR);
+NoteManager::NoteManager(std::string rootPath) {
+    if (rootPath.back() != '/' && rootPath.back() != '\\') {
+        rootPath += "/";
+    }
+
+    // Thiết lập đường dẫn con
+    NOTE_DIR = rootPath + "notes/"; 
+    SHARE_DIR = rootPath + "shares/";
+
+    // Tạo thư mục nếu chưa có
+    if (!fs::exists(rootPath)) fs::create_directories(rootPath);
+    if (!fs::exists(NOTE_DIR)) fs::create_directories(NOTE_DIR);
     if (!fs::exists(SHARE_DIR)) fs::create_directories(SHARE_DIR);
 }
 
@@ -93,7 +98,7 @@ std::string NoteManager::saveNote(const std::string& owner,
     NoteMetadata meta;
     meta.noteId = generateUniqueId();
     meta.ownerUsername = owner;
-    meta.filePath = STORAGE_DIR + meta.noteId + ".bin";
+    meta.filePath = NOTE_DIR + meta.noteId + ".bin";
     meta.uploadTime = std::time(nullptr);
     meta.iv = iv;
     meta.tag = tag;
@@ -109,7 +114,7 @@ std::string NoteManager::saveNote(const std::string& owner,
     binFile.close();
 
     // Lưu Metadata
-    std::ofstream jsonFile(STORAGE_DIR + meta.noteId + ".json");
+    std::ofstream jsonFile(NOTE_DIR + meta.noteId + ".json");
     jsonFile << NoteMetadataToJson(meta).dump(4);
 
     return meta.noteId;
@@ -122,7 +127,7 @@ bool NoteManager::getNoteContent(const std::string& noteId,
     std::string& outTag,
     std::string& outFilename)
 {
-    std::string notePath = STORAGE_DIR + noteId + ".json";
+    std::string notePath = NOTE_DIR + noteId + ".json";
     if (!fs::exists(notePath)) return false;
 
     // Đọc Metadata
@@ -162,9 +167,9 @@ bool NoteManager::getNoteContent(const std::string& noteId,
 // Lấy danh sách note của một user
 std::vector<NoteMetadata> NoteManager::getNotesByUser(const std::string& username) {
     std::vector<NoteMetadata> result;
-    if (!fs::exists(STORAGE_DIR)) return result;
+    if (!fs::exists(NOTE_DIR)) return result;
 
-    for (const auto& entry : fs::directory_iterator(STORAGE_DIR)) {
+    for (const auto& entry : fs::directory_iterator(NOTE_DIR)) {
         if (entry.path().extension() == ".json") {
             try {
                 std::ifstream f(entry.path());
@@ -183,7 +188,7 @@ std::vector<NoteMetadata> NoteManager::getNotesByUser(const std::string& usernam
 
 // Xóa note
 bool NoteManager::deleteNote(const std::string& noteId, const std::string& username) {
-    std::string metadataPath = STORAGE_DIR + noteId + ".json";
+    std::string metadataPath = NOTE_DIR + noteId + ".json";
     if (!fs::exists(metadataPath)) return false;
 
     try {
@@ -205,7 +210,7 @@ bool NoteManager::deleteNote(const std::string& noteId, const std::string& usern
 // -------------------------------------------------------------------
 
 std::string NoteManager::createShare(const std::string& noteId, const std::string& username, int duration, int maxViews) {
-    std::string noteJsonPath = STORAGE_DIR + noteId + ".json";
+    std::string noteJsonPath = NOTE_DIR + noteId + ".json";
     if (!fs::exists(noteJsonPath)) return "";
 
     std::ifstream f(noteJsonPath); json j; f >> j; f.close();
@@ -271,10 +276,6 @@ bool NoteManager::getSharedNoteContent(const std::string& shareId,
     return getNoteContent(share.linkedNoteId, outContent, outIV, outTag, outFilename);
 }
 
-void NoteManager::cleanupExpiredNotes() {
-    // Logic này có thể mở rộng để quét thư mục SHARE_DIR
-    // Hiện tại chỉ demo, bạn có thể implement tương tự deleteNote
-}
 
 
 std::string NoteManager::createTargetedShare(
@@ -288,7 +289,7 @@ std::string NoteManager::createTargetedShare(
     int maxViews)
 {
     // Kiểm tra Note gốc có tồn tại không
-    std::string noteJsonPath = STORAGE_DIR + noteId + ".json";
+    std::string noteJsonPath = NOTE_DIR + noteId + ".json";
     if (!fs::exists(noteJsonPath)) {
         return ""; // File không tồn tại
     }

@@ -21,7 +21,6 @@ class ClientApp {
 
 private:
     std::map<std::string, std::string> localKeys;
-    const std::string KEY_STORE_FILE = "/storage/client/client_keys.json";
     std::string currentUsername;
     void loadLocalKeys();
     void saveLocalKeys();
@@ -46,6 +45,7 @@ public:
     void ListNotes(TLSConnection conn);
     void DownloadNote(TLSConnection conn);
     void DeleteNote(TLSConnection conn);
+    std::string getKeyStorePath();
 
 
     void handleEvents();
@@ -63,6 +63,7 @@ public:
     bool sendPacket(TLSConnection& conn, int cmd, const json& payloadJson);
     json receivePacket(TLSConnection& conn);
 
+
     void savePrivateKey(const std::string& username, const std::vector<uint8_t>& privKey);
     bool loadPrivateKey(const std::string& username);
 
@@ -73,6 +74,7 @@ public:
 
 	// Thiết lập workspace cho user
     void setupUserWorkspace(const std::string& username);
+    void ListLocalFiles(const std::string& path);
 
 
 };
