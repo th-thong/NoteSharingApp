@@ -8,9 +8,10 @@ class AuthManager {
 private:
     // Map lưu session: Key = Token, Value = Username
     std::map<std::string, std::string> activeSessions;
+    std::string USER_DIR;
 
 public:
-    AuthManager(); // Constructor
+    AuthManager(std::string rootPath = "server_data/");
 
     // Đăng ký
     bool registerUser(std::string username, std::string password, std::string pubKey);

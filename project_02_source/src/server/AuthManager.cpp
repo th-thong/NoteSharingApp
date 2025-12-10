@@ -8,11 +8,18 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
-const std::string USER_DIR = "server_data/user/";
+AuthManager::AuthManager(std::string rootPath) {
+    if (rootPath.back() != '/' && rootPath.back() != '\\') {
+        rootPath += "/";
+    }
 
-AuthManager::AuthManager() {
-    if (!fs::exists("server_data")) fs::create_directory("server_data");
-    if (!fs::exists(USER_DIR)) fs::create_directories(USER_DIR);
+    // Thiết lập đường dẫn con
+    this->USER_DIR = rootPath + "user/";
+
+    // Tạo thư mục nếu chưa có
+    if (!fs::exists(USER_DIR)) {
+        fs::create_directories(USER_DIR);
+    }
 }
 
 // Đăng ký người dùng

@@ -1,5 +1,5 @@
 #include "ClientApp.h"
-#include "Protocol.h"     
+#include "Protocol.h"
 #include "CryptoManager.h"
 
 #include <iostream>
@@ -11,22 +11,18 @@
 #include <netdb.h>
 #include <filesystem>
 
-// Include cho Socket trên Linux
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-using namespace std;
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
-// Constructor
 ClientApp::ClientApp() {
     SSL_library_init();
     OpenSSL_add_all_algorithms();
     SSL_load_error_strings();
-    loadLocalKeys();
 }
 
 ClientApp::~ClientApp() {
@@ -44,19 +40,19 @@ bool ClientApp::sendPacket(TLSConnection& conn, int cmd, const json& payloadJson
     header.cmd = (CommandType)cmd;
     header.payloadSize = (uint32_t)payloadStr.size();
 
-    memset(header.token, 0, sizeof(header.token));
+    std::memset(header.token, 0, sizeof(header.token));
     if (!authToken.empty()) {
-        strncpy(header.token, authToken.c_str(), sizeof(header.token) - 1);
+        std::strncpy(header.token, authToken.c_str(), sizeof(header.token) - 1);
     }
 
     if (SSL_write(conn.ssl, &header, sizeof(PacketHeader)) <= 0) {
-        cerr << "[ERROR] Failed to send header." << endl;
+        std::cerr << "[ERROR] Failed to send header." << std::endl;
         return false;
     }
 
     if (header.payloadSize > 0) {
         if (SSL_write(conn.ssl, payloadStr.c_str(), header.payloadSize) <= 0) {
-            cerr << "[ERROR] Failed to send payload." << endl;
+            std::cerr << "[ERROR] Failed to send payload." << std::endl;
             return false;
         }
     }
@@ -68,16 +64,16 @@ json ClientApp::receivePacket(TLSConnection& conn) {
 
     int bytesRead = SSL_read(conn.ssl, &header, sizeof(PacketHeader));
     if (bytesRead <= 0) {
-        throw runtime_error("Connection closed by server or SSL error.");
+        throw std::runtime_error("Connection closed by server or SSL error.");
     }
 
     if (header.payloadSize > 0) {
-        vector<char> buffer(header.payloadSize + 1);
+        std::vector<char> buffer(header.payloadSize + 1);
         int totalReceived = 0;
 
         while (totalReceived < (int)header.payloadSize) {
             int r = SSL_read(conn.ssl, buffer.data() + totalReceived, header.payloadSize - totalReceived);
-            if (r <= 0) throw runtime_error("Incomplete payload received.");
+            if (r <= 0) throw std::runtime_error("Incomplete payload received.");
             totalReceived += r;
         }
         buffer[header.payloadSize] = '\0';
@@ -100,7 +96,7 @@ TLSConnection ClientApp::connectServer(const std::string& ip, int port) {
     }
 
     struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
+    std::memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
 
@@ -113,7 +109,7 @@ TLSConnection ClientApp::connectServer(const std::string& ip, int port) {
         }
     }
     else {
-        memcpy((char*)&server_addr.sin_addr.s_addr, (char*)host->h_addr, host->h_length);
+        std::memcpy((char*)&server_addr.sin_addr.s_addr, (char*)host->h_addr, host->h_length);
     }
 
     if (connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
@@ -152,26 +148,26 @@ TLSConnection ClientApp::connectServer(const std::string& ip, int port) {
 // ---------------------------------------------------------
 
 void ClientApp::menu() {
-    cout << "\n=== SECURE NOTE APP (E2EE Only) ===" << endl;
-    cout << "1. Login" << endl;
-    cout << "2. Register" << endl;
-    cout << "3. Upload Note" << endl;
-    cout << "4. List My Notes" << endl;
-    cout << "5. Share Note (Generate URL)" << endl;
-    cout << "6. Download from URL" << endl;
-    cout << "7. Download My Note" << endl;
-    cout << "0. Exit" << endl;
-    cout << "Select: ";
+    std::cout << "\n=== SECURE NOTE APP ===" << std::endl;
+    std::cout << "1. Login" << std::endl;
+    std::cout << "2. Register" << std::endl;
+    std::cout << "3. Upload Note" << std::endl;
+    std::cout << "4. List My Notes" << std::endl;
+    std::cout << "5. Share Note (Generate URL)" << std::endl;
+    std::cout << "6. Download from URL" << std::endl;
+    std::cout << "7. Download My Note" << std::endl;
+    std::cout << "8. Delete My Note" << std::endl;
+    std::cout << "0. Exit" << std::endl;
+    std::cout << "Select: ";
 }
 
 void ClientApp::handleEvents() {
-    string server_ip;
+    std::string server_ip;
     int port;
     
-    // Kết nối đến server
     server_ip = "server";
     port = 8080;
-    cout << "Connecting to " << server_ip << ":" << port << "...\n";
+    std::cout << "Connecting to " << server_ip << ":" << port << "...\n";
 
     TLSConnection conn = connectServer(server_ip, port);
     if (conn.ssl == NULL) return;
@@ -179,9 +175,9 @@ void ClientApp::handleEvents() {
     int choice = -1;
     while (choice != 0) {
         menu();
-        if (!(cin >> choice)) {
-            cin.clear();
-            cin.ignore(1000, '\n');
+        if (!(std::cin >> choice)) {
+            std::cin.clear();
+            std::cin.ignore(1000, '\n');
             continue;
         }
 
@@ -201,14 +197,16 @@ void ClientApp::handleEvents() {
                 break;
             case 7: DownloadNote(conn); 
                 break;
-            case 0: cout << "Exiting..." << endl; 
+            case 8: DeleteNote(conn); 
                 break;
-            default: cout << "Invalid choice." << endl;
+            case 0: std::cout << "Exiting..." << std::endl; 
+                break;
+            default: std::cout << "Invalid choice." << std::endl;
                 break;
             }
         }
         catch (const std::exception& e) {
-            cerr << "[ERROR] Exception: " << e.what() << endl;
+            std::cerr << "[ERROR] Exception: " << e.what() << std::endl;
             break;
         }
     }
@@ -223,9 +221,9 @@ void ClientApp::handleEvents() {
 //              ĐĂNG NHẬP / ĐĂNG KÝ
 // ---------------------------------------------------------
 void ClientApp::Login(TLSConnection conn) {
-    string username, password;
-    cout << "Username: "; cin >> username;
-    cout << "Password: "; cin >> password;
+    std::string username, password;
+    std::cout << "Username: "; std::cin >> username;
+    std::cout << "Password: "; std::cin >> password;
 
     json req;
     req["username"] = username;
@@ -238,45 +236,45 @@ void ClientApp::Login(TLSConnection conn) {
     if (res.contains("token") && !res["token"].is_null()) {
         authToken = res["token"];
         currentUsername = username;
-        cout << "[SUCCESS] Logged in! Token saved." << endl;
+        std::cout << "[SUCCESS] Logged in! Token saved." << std::endl;
         setupUserWorkspace(username);
+        loadLocalKeys();
         if (loadPrivateKey(username)) {
-            cout << "[INFO] Private key loaded for E2EE." << endl;
+            std::cout << "[INFO] Private key loaded for E2EE." << std::endl;
         }
         else {
-            cout << "[WARN] Private key not found on this device. E2EE features will fail." << endl;
+            std::cout << "[WARN] Private key not found on this device. E2EE features will fail." << std::endl;
         }
     }
     else {
-        cerr << "[FAILED] Login failed: " << res.value("message", "Unknown error") << endl;
+        std::cerr << "[FAILED] Login failed: " << res.value("message", "Unknown error") << std::endl;
     }
 }
 
 void ClientApp::Register(TLSConnection conn) {
-    string username, password;
-    cout << "New Username: "; cin >> username;
-    cout << "New Password: "; cin >> password;
+    std::string username, password;
+    std::cout << "New Username: "; std::cin >> username;
+    std::cout << "New Password: "; std::cin >> password;
 
-    // Tạo cặp khóa DH cho người dùng mới
     CryptoManager::generateDHKeyPair(public_key, private_key);
-    string pubKeyStr = CryptoManager::base64Encode(public_key);
+    std::string pubKeyStr = CryptoManager::base64Encode(public_key);
 
     json req;
     req["username"] = username;
     req["password"] = password;
-    req["public_key"] = pubKeyStr; // Gửi Public Key lên Server
+    req["public_key"] = pubKeyStr;
 
     if (!sendPacket(conn, (int)CommandType::REGISTER, req)) return;
 
     json res = receivePacket(conn);
 
     if (res.value("status", "") == "ok") {
-        cout << "[SUCCESS] Registered successfully!" << endl;
+        std::cout << "[SUCCESS] Registered successfully!" << std::endl;
         setupUserWorkspace(username);
-        savePrivateKey(username, private_key); // Lưu Private Key vào máy
+        savePrivateKey(username, private_key);
     }
     else {
-        cerr << "[FAILED] Register error: " << res.value("message", "Unknown") << endl;
+        std::cerr << "[FAILED] Register error: " << res.value("message", "Unknown") << std::endl;
     }
 }
 
@@ -286,17 +284,21 @@ void ClientApp::Register(TLSConnection conn) {
 
 void ClientApp::UploadNote(TLSConnection conn) {
     if (authToken.empty()) {
-        cerr << "[ERROR] Login required." << endl;
+        std::cerr << "[ERROR] Login required." << std::endl;
         return;
     }
+    
+    std::string workspacePath="client_data/" + currentUsername + "/data/";
+    std::cout<<"Your workspace is at "+ workspacePath + "\n";
+    ListLocalFiles(workspacePath);
 
-    string filename;
-    cout << "Enter filename path to upload: ";
-    cin >> filename;
+    std::string filename;
+    std::cout << "Enter filename path to upload (e.g. " + workspacePath + "a.txt): ";
+    std::cin >> filename;
 
     std::ifstream file(filename, std::ios::binary);
     if (!file.is_open()) {
-        cerr << "[ERROR] Cannot open file: " << filename << endl;
+        std::cerr << "[ERROR] Cannot open file: " << filename << std::endl;
         return;
     }
 
@@ -304,7 +306,7 @@ void ClientApp::UploadNote(TLSConnection conn) {
     file.close();
 
     if (fileContent.empty()) {
-        cerr << "[ERROR] File is empty." << endl;
+        std::cerr << "[ERROR] File is empty." << std::endl;
         return;
     }
 
@@ -315,11 +317,11 @@ void ClientApp::UploadNote(TLSConnection conn) {
         std::vector<uint8_t> cipherBytes;
 
         if (!CryptoManager::aesEncrypt(fileContent, noteKey, iv, tag, cipherBytes)) {
-            cerr << "[ERROR] Encryption failed." << endl;
+            std::cerr << "[ERROR] Encryption failed." << std::endl;
             return;
         }
         std::filesystem::path p(filename);
-        string baseName = p.filename().string();
+        std::string baseName = p.filename().string();
 
         json req;
         req["token"] = authToken;
@@ -333,19 +335,19 @@ void ClientApp::UploadNote(TLSConnection conn) {
         json res = receivePacket(conn);
 
         if (res.value("status", "") == "ok") {
-            string noteId = res["noteId"];
+            std::string noteId = res["noteId"];
             localKeys[noteId] = CryptoManager::base64Encode(noteKey);
             saveLocalKeys();
 
-            cout << "[SUCCESS] Note uploaded with ID: " << noteId << endl;
+            std::cout << "[SUCCESS] Note uploaded with ID: " << noteId << std::endl;
         }
         else {
-            cerr << "[FAILED] Upload error: " << res.value("message", "Unknown") << endl;
+            std::cerr << "[FAILED] Upload error: " << res.value("message", "Unknown") << std::endl;
         }
 
     }
     catch (const std::exception& e) {
-        cerr << "[ERROR] Processing error: " << e.what() << endl;
+        std::cerr << "[ERROR] Processing error: " << e.what() << std::endl;
     }
 }
 
@@ -367,10 +369,16 @@ bool ClientApp::loadPrivateKey(const std::string& username) {
 }
 
 
+std::string ClientApp::getKeyStorePath() {
+    if (currentUsername.empty()) return "";
+    return "client_data/" + currentUsername + "/data/client_keys.json";
+}
+
+
 void ClientApp::loadLocalKeys() {
-    if (std::filesystem::exists(KEY_STORE_FILE)) {
+    if (std::filesystem::exists(getKeyStorePath())) {
         try {
-            std::ifstream f(KEY_STORE_FILE);
+            std::ifstream f(getKeyStorePath());
             json j; f >> j;
             localKeys = j.get<std::map<std::string, std::string>>();
         }
@@ -379,7 +387,7 @@ void ClientApp::loadLocalKeys() {
 }
 
 void ClientApp::saveLocalKeys() {
-    std::ofstream f(KEY_STORE_FILE);
+    std::ofstream f(getKeyStorePath());
     json j(localKeys);
     f << j.dump(4);
     f.close();
@@ -388,10 +396,9 @@ void ClientApp::saveLocalKeys() {
 // ---------------------------------------------------------
 //              CHỨC NĂNG: LIỆT KÊ GHI CHÚ
 // ---------------------------------------------------------
-
 void ClientApp::ListNotes(TLSConnection conn) {
     if (authToken.empty()) {
-        cerr << "[ERROR] Login required." << endl;
+        std::cerr << "[ERROR] Login required." << std::endl;
         return;
     }
 
@@ -402,25 +409,31 @@ void ClientApp::ListNotes(TLSConnection conn) {
     json res = receivePacket(conn);
 
     if (res.is_array()) {
-        cout << "\n--- MY NOTES ---" << endl;
-        printf("%-15s | %-25s\n", "Note ID", "Upload Time");
-        cout << "---------------------------------------------" << endl;
+        std::cout << "\n=== MY WORKSPACE ===" << std::endl;
+        // Thêm cột Filename vào giao diện
+        std::printf("%-15s | %-30s | %-25s\n", "Note ID", "Filename", "Upload Time");
+        std::cout << "-----------------------------------------------------------------------------" << std::endl;
+        
         for (auto& item : res) {
-            string id = item.value("noteId", "N/A");
+            std::string id = item.value("noteId", "N/A");
+            // Lấy tên file gốc (Server đã được sửa ở bước trước để gửi field này)
+            std::string fname = item.value("filename", "Unknown");
+            
             time_t upTime = item.value("uploadTime", 0);
-            string timeStr = "Unknown";
+            std::string timeStr = "Unknown";
             if (upTime > 0) {
                 char buffer[26];
                 ctime_r(&upTime, buffer);
                 timeStr = buffer;
                 if (!timeStr.empty() && timeStr.back() == '\n') timeStr.pop_back();
             }
-            printf("%-15s | %-25s\n", id.c_str(), timeStr.c_str());
+            // In ra 3 cột
+            std::printf("%-15s | %-30s | %-25s\n", id.c_str(), fname.c_str(), timeStr.c_str());
         }
-        cout << "---------------------------------------------" << endl;
+        std::cout << "-----------------------------------------------------------------------------" << std::endl;
     }
     else {
-        cout << "[ERROR] Failed to list notes." << endl;
+        std::cout << "[ERROR] Failed to list notes or workspace is empty." << std::endl;
     }
 }
 
@@ -429,15 +442,14 @@ void ClientApp::ListNotes(TLSConnection conn) {
 //              CHỨC NĂNG: DOWNLOAD NOTE (OWNER)
 // ---------------------------------------------------------
 void ClientApp::DownloadNote(TLSConnection conn) {
-    if (authToken.empty()) { cerr << "[ERROR] Login required." << endl; return; }
+    if (authToken.empty()) { std::cerr << "[ERROR] Login required." << std::endl; return; }
 
-    string noteId;
-    cout << "Enter Note ID: "; cin >> noteId;
+    std::string noteId;
+    std::cout << "Enter Note ID: "; std::cin >> noteId;
 
-    // Tìm key trong máy
-    string keyB64 = localKeys.count(noteId) ? localKeys[noteId] : "";
+    std::string keyB64 = localKeys.count(noteId) ? localKeys[noteId] : "";
     if (keyB64.empty()) {
-        cout << "[WARN] Key not found locally. Enter Key (Base64): "; cin >> keyB64;
+        std::cout << "[WARN] Key not found locally. Enter Key (Base64): "; std::cin >> keyB64;
     }
 
     json req;
@@ -449,16 +461,16 @@ void ClientApp::DownloadNote(TLSConnection conn) {
 
     if (res.contains("cipher_text")) {
         try {
-            vector<uint8_t> cipher = CryptoManager::base64Decode(res["cipher_text"]);
-            vector<uint8_t> iv = CryptoManager::base64Decode(res["iv"]);
-            vector<uint8_t> tag = CryptoManager::base64Decode(res["tag"]);
-            vector<uint8_t> key = CryptoManager::base64Decode(keyB64);
-            vector<uint8_t> plain;
+            std::vector<uint8_t> cipher = CryptoManager::base64Decode(res["cipher_text"]);
+            std::vector<uint8_t> iv = CryptoManager::base64Decode(res["iv"]);
+            std::vector<uint8_t> tag = CryptoManager::base64Decode(res["tag"]);
+            std::vector<uint8_t> key = CryptoManager::base64Decode(keyB64);
+            std::vector<uint8_t> plain;
 
             if (CryptoManager::aesDecrypt(cipher, key, iv, tag, plain)) {
-                string originalName = res.value("filename", "unknown_share.bin");
+                std::string originalName = res.value("filename", "unknown_share.bin");
 
-                string saveDir = "downloads/";
+                std::string saveDir = "downloads/";
                 if (!currentUsername.empty()) {
                     saveDir = "client_data/" + currentUsername + "/downloads/";
                 }
@@ -467,78 +479,72 @@ void ClientApp::DownloadNote(TLSConnection conn) {
                     fs::create_directories(saveDir);
                 }
 
-                string outPath = saveDir + originalName;
+                std::string outPath = saveDir + originalName;
 
-                ofstream f(outPath, ios::binary);
+                std::ofstream f(outPath, std::ios::binary);
                 f.write((char*)plain.data(), plain.size());
                 f.close();
-                cout << "[SUCCESS] File saved as: " << outPath << endl;
+                std::cout << "[SUCCESS] File saved as: " << outPath << std::endl;
             }
             else {
-                cerr << "[ERROR] Decryption failed! Key incorrect?" << endl;
+                std::cerr << "[ERROR] Decryption failed! Key incorrect?" << std::endl;
             }
         }
-        catch (...) { cout << "[ERROR] Exception during decryption." << endl; }
+        catch (...) { std::cout << "[ERROR] Exception during decryption." << std::endl; }
     }
     else {
-        cout << "[ERROR] " << res.value("message", "Failed to download") << endl;
+        std::cout << "[ERROR] " << res.value("message", "Failed to download") << std::endl;
     }
 }
 
 
 
 // ---------------------------------------------------------
-//              Sare Note
+//              Share Note
 // ---------------------------------------------------------
 void ClientApp::ShareNote(TLSConnection conn) {
-    if (authToken.empty()) { cout << "[ERROR] Login required." << endl; return; }
-    if (private_key.empty()) { cout << "[ERROR] Private key missing. Cannot perform E2EE." << endl; return; }
+    if (authToken.empty()) { std::cout << "[ERROR] Login required." << std::endl; return; }
+    if (private_key.empty()) { std::cout << "[ERROR] Private key missing. Cannot perform E2EE." << std::endl; return; }
 
-    // 1. Chọn file và người nhận
     ListNotes(conn);
-    string noteId, recipient;
+    std::string noteId, recipient;
 
-    cout << "\n=== SHARE NOTE (End-to-End Encrypted) ===" << endl;
-    cout << "Enter Note ID to share: "; cin >> noteId;
-    cout << "Enter Recipient Username: "; cin >> recipient;
+    std::cout << "\n=== SHARE NOTE (End-to-End Encrypted) ===" << std::endl;
+    std::cout << "Enter Note ID to share: "; std::cin >> noteId;
+    std::cout << "Enter Recipient Username: "; std::cin >> recipient;
 
-    // --- NHẬP METADATA ---
     int hours, views;
-    cout << "Link expiration (hours): ";
-    if (!(cin >> hours)) { // Validate input số
-        cin.clear(); cin.ignore(1000, '\n'); hours = 24; // Mặc định 24h nếu nhập sai
+    std::cout << "Link expiration (hours): ";
+    if (!(std::cin >> hours)) { 
+        std::cin.clear(); std::cin.ignore(1000, '\n'); hours = 24; 
     }
 
-    cout << "Max views (e.g. 1): ";
-    if (!(cin >> views)) {
-        cin.clear(); cin.ignore(1000, '\n'); views = 1; // Mặc định 1 view nếu nhập sai
+    std::cout << "Max views (e.g. 1): ";
+    if (!(std::cin >> views)) {
+        std::cin.clear(); std::cin.ignore(1000, '\n'); views = 1; 
     }
 
 
-    // 2. Tìm Note Key trong máy
     if (localKeys.find(noteId) == localKeys.end()) {
-        cout << "[ERROR] Encryption Key for this note not found locally." << endl; return;
+        std::cout << "[ERROR] Encryption Key for this note not found locally." << std::endl; return;
     }
-    vector<uint8_t> noteKey = CryptoManager::base64Decode(localKeys[noteId]);
+    std::vector<uint8_t> noteKey = CryptoManager::base64Decode(localKeys[noteId]);
 
-    // 3. Lấy Public Key của Người nhận (Recipient)
     json reqKey; reqKey["username"] = recipient;
     if (!sendPacket(conn, (int)CommandType::GET_PUBLIC_KEY, reqKey)) return;
     json resKey = receivePacket(conn);
 
     if (resKey.value("status", "") != "ok") {
-        cout << "[ERROR] Recipient not found or has no public key." << endl; return;
+        std::cout << "[ERROR] Recipient not found or has no public key." << std::endl; return;
     }
-    vector<uint8_t> recipientPubKey = CryptoManager::base64Decode(resKey["public_key"]);
+    std::vector<uint8_t> recipientPubKey = CryptoManager::base64Decode(resKey["public_key"]);
 
-    // 4. E2EE: Tính Shared Secret và Mã hóa Note Key
-    cout << "[INFO] Encrypting key for " << recipient << "..." << endl;
-    vector<uint8_t> sharedSecret = CryptoManager::deriveSharedSecret(private_key, recipientPubKey);
+    std::cout << "[INFO] Encrypting key for " << recipient << "..." << std::endl;
+    std::vector<uint8_t> sharedSecret = CryptoManager::deriveSharedSecret(private_key, recipientPubKey);
 
-    vector<uint8_t> encKey, iv, tag;
+    std::vector<uint8_t> encKey, iv, tag;
     CryptoManager::aesEncrypt(noteKey, sharedSecret, iv, tag, encKey);
 
-    // 5. Gửi Metadata lên Server
     json reqShare;
     reqShare["token"] = authToken;
     reqShare["noteId"] = noteId;
@@ -547,25 +553,23 @@ void ClientApp::ShareNote(TLSConnection conn) {
     reqShare["iv"] = CryptoManager::base64Encode(iv);
     reqShare["tag"] = CryptoManager::base64Encode(tag);
 
-    // --- GỬI DỮ LIỆU NGƯỜI DÙNG NHẬP ---
-    reqShare["duration"] = hours * 3600; // Đổi giờ sang giây
+    reqShare["duration"] = hours * 3600; 
     reqShare["max_views"] = views;
-    // ------------------------------------
 
     if (!sendPacket(conn, (int)CommandType::SHARE_NOTE, reqShare)) return;
     json resShare = receivePacket(conn);
 
     if (resShare.value("status", "") == "ok") {
-        string shareId = resShare["shareId"];
-        cout << "\n[SUCCESS] Encrypted Link Created!" << endl;
-        cout << "---------------------------------------------------" << endl;
-        cout << "URL: securenote://" << shareId << endl;
-        cout << "---------------------------------------------------" << endl;
-        cout << "Settings: Expire in " << hours << "h, Max views: " << views << endl;
-        cout << "Send this URL to user '" << recipient << "'." << endl;
+        std::string shareId = resShare["shareId"];
+        std::cout << "\n[SUCCESS] Encrypted Link Created!" << std::endl;
+        std::cout << "---------------------------------------------------" << std::endl;
+        std::cout << "URL: securenote://" << shareId << std::endl;
+        std::cout << "---------------------------------------------------" << std::endl;
+        std::cout << "Settings: Expire in " << hours << "h, Max views: " << views << std::endl;
+        std::cout << "Send this URL to user '" << recipient << "'." << std::endl;
     }
     else {
-        cerr << "[FAILED] " << resShare.value("message", "Unknown error") << endl;
+        std::cerr << "[FAILED] " << resShare.value("message", "Unknown error") << std::endl;
     }
 }
 
@@ -573,59 +577,55 @@ void ClientApp::ShareNote(TLSConnection conn) {
 //              Download file từ URL
 // ---------------------------------------------------------
 void ClientApp::DownloadFromURL(TLSConnection conn) {
-    if (authToken.empty()) { cout << "[ERROR] Login required to verify identity." << endl; return; }
-    if (private_key.empty()) { cout << "[ERROR] Private key missing." << endl; return; }
+    if (authToken.empty()) { std::cout << "[ERROR] Login required to verify identity." << std::endl; return; }
+    if (private_key.empty()) { std::cout << "[ERROR] Private key missing." << std::endl; return; }
 
-    string url;
-    cout << "Paste the URL (securenote://...): "; cin >> url;
+    std::string url;
+    std::cout << "Paste the URL (securenote://...): "; std::cin >> url;
 
-    string prefix = "securenote://";
+    std::string prefix = "securenote://";
     size_t prefixPos = url.find(prefix);
-    if (prefixPos == string::npos) {
-        cerr << "[ERROR] Invalid URL format!" << endl; return;
+    if (prefixPos == std::string::npos) {
+        std::cerr << "[ERROR] Invalid URL format!" << std::endl; return;
     }
-    string shareId = url.substr(prefix.length());
+    std::string shareId = url.substr(prefix.length());
 
-    // 1. Tải Metadata & Encrypted Key
     json req; req["shareId"] = shareId;
     if (!sendPacket(conn, (int)CommandType::DOWNLOAD_SHARED, req)) return;
     json res = receivePacket(conn);
 
     if (!res.contains("encrypted_key")) {
-        cout << "[ERROR] Link invalid, expired or access denied." << endl; return;
+        std::cout << "[ERROR] Link invalid, expired or access denied." << std::endl; return;
     }
 
     try {
-        string sender = res["sender"];
-        cout << "[INFO] Note sent by: " << sender << endl;
+        std::string sender = res["sender"];
+        std::cout << "[INFO] Note sent by: " << sender << std::endl;
 
-        // 2. Lấy Public Key Sender
         json reqKey; reqKey["username"] = sender;
         if (!sendPacket(conn, (int)CommandType::GET_PUBLIC_KEY, reqKey)) return;
         json resKey = receivePacket(conn);
-        vector<uint8_t> senderPubKey = CryptoManager::base64Decode(resKey["public_key"]);
+        std::vector<uint8_t> senderPubKey = CryptoManager::base64Decode(resKey["public_key"]);
 
-        // 3. E2EE Decrypt Key
-        vector<uint8_t> sharedSecret = CryptoManager::deriveSharedSecret(private_key, senderPubKey);
-        vector<uint8_t> encKey = CryptoManager::base64Decode(res["encrypted_key"]);
-        vector<uint8_t> kIv = CryptoManager::base64Decode(res["key_iv"]);
-        vector<uint8_t> kTag = CryptoManager::base64Decode(res["key_tag"]);
-        vector<uint8_t> noteKey;
+        std::vector<uint8_t> sharedSecret = CryptoManager::deriveSharedSecret(private_key, senderPubKey);
+        std::vector<uint8_t> encKey = CryptoManager::base64Decode(res["encrypted_key"]);
+        std::vector<uint8_t> kIv = CryptoManager::base64Decode(res["key_iv"]);
+        std::vector<uint8_t> kTag = CryptoManager::base64Decode(res["key_tag"]);
+        std::vector<uint8_t> noteKey;
 
         if (!CryptoManager::aesDecrypt(encKey, sharedSecret, kIv, kTag, noteKey)) {
-            cout << "[ERROR] E2EE Decryption Failed! Wrong identity." << endl; return;
+            std::cout << "[ERROR] E2EE Decryption Failed! Wrong identity." << std::endl; return;
         }
 
-        // 4. Decrypt Content
-        vector<uint8_t> cipher = CryptoManager::base64Decode(res["cipher_text"]);
-        vector<uint8_t> cIv = CryptoManager::base64Decode(res["iv"]);
-        vector<uint8_t> cTag = CryptoManager::base64Decode(res["tag"]);
-        vector<uint8_t> plain;
+        std::vector<uint8_t> cipher = CryptoManager::base64Decode(res["cipher_text"]);
+        std::vector<uint8_t> cIv = CryptoManager::base64Decode(res["iv"]);
+        std::vector<uint8_t> cTag = CryptoManager::base64Decode(res["tag"]);
+        std::vector<uint8_t> plain;
 
         if (CryptoManager::aesDecrypt(cipher, noteKey, cIv, cTag, plain)) {
-            string originalName = res.value("filename", "unknown_share.bin");
+            std::string originalName = res.value("filename", "unknown_share.bin");
 
-            string saveDir = "downloads/";
+            std::string saveDir = "downloads/";
             if (!currentUsername.empty()) {
                 saveDir = "client_data/" + currentUsername + "/downloads/";
             }
@@ -634,20 +634,20 @@ void ClientApp::DownloadFromURL(TLSConnection conn) {
                 fs::create_directories(saveDir);
             }
 
-            string outPath = saveDir + originalName;
+            std::string outPath = saveDir + originalName;
 
-            ofstream f(outPath, ios::binary);
+            std::ofstream f(outPath, std::ios::binary);
             f.write((char*)plain.data(), plain.size());
             f.close();
-            cout << "[SUCCESS] Decrypted & Saved to: " << outPath << endl;
+            std::cout << "[SUCCESS] Decrypted & Saved to: " << outPath << std::endl;
         }
         else {
-            cout << "[ERROR] Content Decryption Failed." << endl;
+            std::cout << "[ERROR] Content Decryption Failed." << std::endl;
         }
 
     }
     catch (const std::exception& e) {
-        cerr << "[ERROR] " << e.what() << endl;
+        std::cerr << "[ERROR] " << e.what() << std::endl;
     }
 }
 
@@ -657,12 +657,10 @@ void ClientApp::DownloadFromURL(TLSConnection conn) {
 // ---------------------------------------------------------
 void ClientApp::setupUserWorkspace(const std::string& username) {
     try {
-        // Đường dẫn gốc: client_data/username
         std::string userRoot = "client_data/" + username;
         std::string downloadPath = userRoot + "/downloads";
         std::string dataPath = userRoot + "/data";
 
-        // Tạo các thư mục (hàm create_directories sẽ không lỗi nếu thư mục đã tồn tại)
         if (!fs::exists(userRoot)) fs::create_directories(userRoot);
         if (!fs::exists(downloadPath)) fs::create_directories(downloadPath);
         if (!fs::exists(dataPath)) fs::create_directories(dataPath);
@@ -672,4 +670,80 @@ void ClientApp::setupUserWorkspace(const std::string& username) {
     catch (const std::exception& e) {
         std::cerr << "[ERROR] Failed to create user directories: " << e.what() << std::endl;
     }
+}
+
+
+
+void ClientApp::DeleteNote(TLSConnection conn) {
+    if (authToken.empty()) { 
+        std::cerr << "[ERROR] Login required." << std::endl; 
+        return; 
+    }
+
+    // Hiện danh sách để chọn file xóa
+    ListNotes(conn);
+
+    std::string noteId;
+    std::cout << "\n=== DELETE NOTE ===" << std::endl;
+    std::cout << "Enter Note ID to delete: "; 
+    std::cin >> noteId;
+
+    // Xác nhận
+    std::string confirm;
+    std::cout << "Are you sure you want to delete " << noteId << "? (y/n): ";
+    std::cin >> confirm;
+    if (confirm != "y" && confirm != "Y") {
+        std::cout << "[INFO] Cancelled." << std::endl;
+        return;
+    }
+
+    json req;
+    req["token"] = authToken;
+    req["noteId"] = noteId;
+
+    if (!sendPacket(conn, (int)CommandType::DELETE_NOTE, req)) return;
+    json res = receivePacket(conn);
+
+    if (res.value("status", "") == "ok") {
+        std::cout << "[SUCCESS] Note deleted from server." << std::endl;
+        
+        // Xóa Key trong Local Store để dọn dẹp
+        if (localKeys.count(noteId)) {
+            localKeys.erase(noteId);
+            saveLocalKeys();
+            std::cout << "[INFO] Removed encryption key from local storage." << std::endl;
+        }
+    } else {
+        std::cerr << "[FAILED] Delete error: " << res.value("message", "Unknown or Permission denied") << std::endl;
+    }
+}
+
+
+
+void ClientApp::ListLocalFiles(const std::string& path) {
+    if (!fs::exists(path)) {
+        std::cout << "[INFO] Directory does not exist: " << path << std::endl;
+        return;
+    }
+
+    std::cout << "\n--- FILES IN: " << path << " ---" << std::endl;
+    bool isEmpty = true;
+
+    try {
+        for (const auto& entry : fs::directory_iterator(path)) {
+            if (entry.is_regular_file()) { // Chỉ hiện file, bỏ qua thư mục con
+                isEmpty = false;
+                std::string filename = entry.path().filename().string();
+                uintmax_t size = entry.file_size();
+                std::cout << "- " << filename << " (" << size << " bytes)" << std::endl;
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[ERROR] Listing failed: " << e.what() << std::endl;
+    }
+
+    if (isEmpty) {
+        std::cout << "(Empty directory)" << std::endl;
+    }
+    std::cout << "-----------------------------------" << std::endl;
 }

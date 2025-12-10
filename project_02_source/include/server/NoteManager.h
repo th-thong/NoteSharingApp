@@ -37,7 +37,7 @@ json ShareToJSON(const ShareMetadata& m);
 ShareMetadata JSONToShare(const json& j);
 class NoteManager {
 public:
-    NoteManager();
+    NoteManager(std::string rootPath = "server_data/");
 
 
     std::string saveNote(
@@ -68,7 +68,6 @@ public:
         std::string& outFilename
     );
 
-    void cleanupExpiredNotes();
 
     std::vector<NoteMetadata> getNotesByUser(const std::string& username);
 
@@ -95,6 +94,8 @@ public:
         int maxViews);
 private:
     std::string generateUniqueId();
+    std::string NOTE_DIR;
+    std::string SHARE_DIR;
 
 };
 

@@ -1,6 +1,5 @@
 #include "Server.h"
 #include "Protocol.h"
-#include "Utils.h"
 #include "CryptoManager.h"
 #include "NoteManager.h"
 
