@@ -4,25 +4,24 @@
 #include <cstdint>
 
 enum class CommandType : uint8_t {
-    // --- Lệnh từ Client gửi lên ---
     REGISTER = 1,
     LOGIN,
     UPLOAD_NOTE,
     DOWNLOAD_NOTE,
-    
-    // --- Nhóm lệnh chia sẻ (End-to-End) ---
-    SHARE_REQUEST_PUBKEY,   // Bước 1: Xin public key của user B
-    SHARE_SEND_ENCRYPTED_KEY, // Bước 2: Gửi key note đã mã hóa cho user B
-    
-    GET_METADATA,           // Lấy danh sách ghi chú
-    
-    // --- Phản hồi từ Server gửi về ---
-    CMD_SUCCESS,            // Thành công (Payload rỗng hoặc chứa data)
-    CMD_ERROR,              // Thất bại (Payload chứa thông báo lỗi text)
-    CMD_DATA                // Phản hồi chứa dữ liệu (ví dụ nội dung file tải về)
+    DELETE_NOTE,
+
+    // --- Chia sẻ ---
+    GET_METADATA,       // Lấy danh sách note
+    GET_PUBLIC_KEY,     // Lấy PubKey để mã hóa/giải mã E2EE
+	SHARE_NOTE,         // Chia sẻ note
+    DOWNLOAD_SHARED,    // Tải note được chia sẻ
+
+    CMD_SUCCESS,
+    CMD_ERROR,
+    CMD_DATA
 };
 
-// Sử dụng pragma pack để ép struct không có byte thừa (padding)
+// Đảm bảo không có padding giữa các trường
 #pragma pack(push, 1) 
 struct PacketHeader {
     CommandType cmd;

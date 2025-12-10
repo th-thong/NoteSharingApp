@@ -8,112 +8,104 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
+const std::string USER_DIR = "server_data/user/";
 
 AuthManager::AuthManager() {
-    if (!fs::exists("database/user")) {
-        fs::create_directories("database/user");
-    }
+    if (!fs::exists("server_data")) fs::create_directory("server_data");
+    if (!fs::exists(USER_DIR)) fs::create_directories(USER_DIR);
 }
 
 // Đăng ký người dùng
 bool AuthManager::registerUser(std::string username, std::string password, std::string pubKey) {
-    std::string userPath = "database/user/" + username + ".json";
+    std::string userPath = USER_DIR + username + ".json";
 
-    // Kiểm tra xem user đã tồn tại chưa
+    // Kiểm tra user tồn tại
     if (fs::exists(userPath)) {
         std::cerr << "[AUTH] User " << username << " already exists." << std::endl;
         return false;
     }
 
-    // Tạo Salt ngẫu nhiên
-    std::string salt = CryptoManager::generateSalt();
-
-    // Hash mật khẩu kèm Salt (Pass + Salt -> Hash)
-    std::string hashedPassword = CryptoManager::hashPassword(password, salt);
-
-    // Tạo JSON để lưu trữ thông tin
-    json userJson;
-    userJson["username"] = username;
-    userJson["salt"] = salt;             // Lưu salt (để dùng khi login)
-    userJson["hash"] = hashedPassword;   // Lưu hash (KHÔNG lưu password gốc)
-    userJson["public_key"] = pubKey;     // Lưu public key Diffie-Hellman
-
-    // D. Ghi xuống file
     try {
+        // A. Tạo Salt và Hash password bằng PBKDF2
+        std::vector<uint8_t> salt, hash;
+        CryptoManager::hashPasswordPBKDF2(password, salt, hash);
+
+        // B. Chuyển sang Base64 để lưu vào JSON
+        std::string saltB64 = CryptoManager::base64Encode(salt);
+        std::string hashB64 = CryptoManager::base64Encode(hash);
+
+        // C. Lưu file
+        json userJson;
+        userJson["username"] = username;
+        userJson["salt"] = saltB64;
+        userJson["hash"] = hashB64;
+        userJson["public_key"] = pubKey; // Client gửi lên đã là Base64
+
         std::ofstream file(userPath);
         file << userJson.dump(4);
         file.close();
-        std::cout << "[AUTH] User " << username << " registered successfully." << std::endl;
+
+        std::cout << "[AUTH] User " << username << " registered." << std::endl;
         return true;
-    } catch (const std::exception& e) {
-        std::cerr << "[AUTH] Error saving user: " << e.what() << std::endl;
+    }
+    catch (const std::exception& e) {
+        std::cerr << "[AUTH] Register error: " << e.what() << std::endl;
         return false;
     }
 }
 
-// Đăng nhập người dùng
+// Đăng nhập
 std::string AuthManager::loginUser(std::string username, std::string password) {
-    std::string userPath = "database/user/" + username + ".json";
-
-    // Kiểm tra user có tồn tại không
-    if (!fs::exists(userPath)) {
-        return "";
-    }
+    std::string userPath = USER_DIR + username + ".json";
+    if (!fs::exists(userPath)) return "";
 
     try {
-        // Đọc file thông tin user
+        // A. Đọc dữ liệu từ file
         std::ifstream file(userPath);
         json userJson;
         file >> userJson;
 
-        std::string storedSalt = userJson["salt"];
-        std::string storedHash = userJson["hash"];
+        // B. Decode Base64 lấy lại Salt và Hash gốc (dạng vector)
+        std::string storedSaltB64 = userJson["salt"];
+        std::string storedHashB64 = userJson["hash"];
 
-        // Tính Hash của mật khẩu vừa nhập với Salt đã lưu
-        std::string currentHash = CryptoManager::hashPassword(password, storedSalt);
+        std::vector<uint8_t> storedSalt = CryptoManager::base64Decode(storedSaltB64);
+        std::vector<uint8_t> storedHash = CryptoManager::base64Decode(storedHashB64);
 
-        // So sánh Hash
-        if (currentHash == storedHash) {
+        // C. Xác thực mật khẩu bằng PBKDF2
+        if (CryptoManager::verifyPasswordPBKDF2(password, storedSalt, storedHash)) {
             // Đăng nhập thành công -> Tạo Token
-            // (Trong thực tế nên dùng JWT, ở đây dùng Random String làm Token session)
-            std::string token = CryptoManager::generateRandomKey(); 
-            
-            // Lưu token vào RAM (Session map)
+            // Dùng generateRandomBytes(32) rồi encode base64 làm Token
+            std::vector<uint8_t> tokenBytes = CryptoManager::generateRandomBytes(32);
+            std::string token = CryptoManager::base64Encode(tokenBytes);
+
             activeSessions[token] = username;
-            
-            std::cout << "[AUTH] User " << username << " logged in. Token: " << token << std::endl;
+            std::cout << "[AUTH] Login success: " << username << std::endl;
             return token;
         }
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception& e) {
         std::cerr << "[AUTH] Login error: " << e.what() << std::endl;
     }
 
     return "";
 }
 
-// 3. Kiểm tra Token (Xác thực session)
+// Validate Token
 std::string AuthManager::validateToken(std::string token) {
-    // Tìm token trong map session đang hoạt động
     auto it = activeSessions.find(token);
-    
-    if (it != activeSessions.end()) {
-        return it->second; // Trả về username của token đó
-    }
-    
-    return ""; // Token không hợp lệ hoặc đã hết hạn
+    if (it != activeSessions.end()) return it->second;
+    return "";
 }
 
-// Lấy Public Key của một user (Dùng cho chức năng chia sẻ)
+// Get Public Key
 std::string AuthManager::getUserPublicKey(std::string username) {
-    std::string userPath = "database/user/" + username + ".json";
+    std::string userPath = USER_DIR + username + ".json";
     if (!fs::exists(userPath)) return "";
-    
     try {
         std::ifstream file(userPath);
-        json j;
-        file >> j;
+        json j; file >> j;
         return j["public_key"];
-    } catch (...) {
-        return "";
     }
+    catch (...) { return ""; }
 }

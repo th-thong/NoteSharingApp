@@ -13,7 +13,7 @@ public:
 
     // 1. Hàm bổ trợ
     static std::vector<std::uint8_t> generateRandomBytes(size_t size);
-    
+
     // 2. PBKDF2
     static void hashPasswordPBKDF2(
         const std::string& password,
@@ -28,10 +28,11 @@ public:
     static void generateDHKeyPair(
         std::vector<std::uint8_t>& publicKeyOut,
         std::vector<std::uint8_t>& privateKeyOut);
-    static void deriveSharedSecret(
-        const std::vector<std::uint8_t>& myPrivateKey,
-        const std::vector<std::uint8_t>& peerPublicKey,
-        std::vector<std::uint8_t>& sharedSecretOut);
+
+    static std::vector<uint8_t> deriveSharedSecret(
+        const std::vector<uint8_t>& myPrivateKey,
+        const std::vector<uint8_t>& peerPublicKey
+    );
 
     // 4. AES-GCM Encrypt/Decrypt
     static bool aesEncrypt(
@@ -60,5 +61,7 @@ public:
     // 6. Base64 Encoding/Decoding
     static std::string base64Encode(const std::vector<std::uint8_t>& data);
     static std::vector<std::uint8_t> base64Decode(const std::string& encoded);
+
+
 };
 #endif
