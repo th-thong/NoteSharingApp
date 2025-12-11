@@ -76,8 +76,10 @@ enable_testing()
 
 # File thực thi test (Gồm các file test case)
 add_executable(run_tests 
-    project_02_test/crypto_test.cpp
-    project_02_test/server_logic_test.cpp
+    project_02_test/test_crypto.cpp
+    project_02_test/test_auth.cpp
+    project_02_test/test_access_control.cpp
+    project_02_test/test_integration_e2ee.cpp
 )
 
 # Link Test với các thư viện Logic và GTest

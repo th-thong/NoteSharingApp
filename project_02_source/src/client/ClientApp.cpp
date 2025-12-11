@@ -444,6 +444,7 @@ void ClientApp::ListNotes(TLSConnection conn) {
 void ClientApp::DownloadNote(TLSConnection conn) {
     if (authToken.empty()) { std::cerr << "[ERROR] Login required." << std::endl; return; }
 
+    ListNotes(conn);
     std::string noteId;
     std::cout << "Enter Note ID: "; std::cin >> noteId;
 
@@ -680,7 +681,7 @@ void ClientApp::DeleteNote(TLSConnection conn) {
         return; 
     }
 
-    // Hiện danh sách để chọn file xóa
+    // Hiện danh sách để chọn note xóa
     ListNotes(conn);
 
     std::string noteId;
